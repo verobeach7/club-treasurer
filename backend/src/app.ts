@@ -4,6 +4,7 @@ import { cors } from 'hono/cors';
 import * as v from 'valibot';
 import { Receipt } from './agents/receipt.ts';
 import { bearerToken, formatInviteCode, ipScope, normalizeInviteCode } from './lib/auth.ts';
+import { entriesToCsv } from './lib/csv.ts';
 import { consumeAnalysis, consumeJoin, readLimits, remainingAnalyses } from './lib/limits.ts';
 import {
 	claimConversation,
@@ -11,6 +12,7 @@ import {
 	createClub,
 	createConversation,
 	deleteEntry,
+	exportEntries,
 	joinClub,
 	listEntries,
 	type Member,
@@ -162,6 +164,20 @@ app.get('/api/entries', requireMember, async (c) => {
 	if (typeof month !== 'string' && !month.success) return err(c, 400, 'invalid_month');
 	const value = typeof month === 'string' ? month : month.output;
 	return c.json({ month: value, ...(await listEntries(c.env.DB, c.var.member.clubId, value)) });
+});
+
+/** CSV download. `?month=YYYY-MM` for one month; omit for all entries. */
+app.get('/api/entries.csv', requireMember, async (c) => {
+	const q = c.req.query('month');
+	const month = q === undefined ? null : v.safeParse(Month, q);
+	if (month !== null && !month.success) return err(c, 400, 'invalid_month');
+	const value = month === null ? null : month.output;
+	const csv = entriesToCsv(await exportEntries(c.env.DB, c.var.member.clubId, value));
+	return c.body(csv, 200, {
+		'Content-Type': 'text/csv; charset=utf-8',
+		'Content-Disposition': `attachment; filename="club-treasurer-${value ?? 'all'}.csv"`,
+		'Cache-Control': 'no-store',
+	});
 });
 
 app.delete('/api/entries/:id', requireMember, async (c) => {

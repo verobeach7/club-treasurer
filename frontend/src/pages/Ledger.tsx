@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { deleteEntry, errorMessage, type Ledger as LedgerData, listEntries, won } from '../lib/api.ts';
+import { deleteEntry, downloadCsv, errorMessage, type Ledger as LedgerData, listEntries, won } from '../lib/api.ts';
 import type { Session } from '../lib/session.ts';
 
 function currentMonth() {
@@ -35,6 +35,15 @@ export function Ledger({ session, initialMonth }: { session: Session; initialMon
 		}
 	}
 
+	async function download(which?: string) {
+		setError(null);
+		try {
+			await downloadCsv(session, which);
+		} catch (err) {
+			setError(errorMessage(err));
+		}
+	}
+
 	const months = [...new Set([currentMonth(), month, ...(data?.months ?? [])])].sort().reverse();
 	const isTreasurer = session.role === 'treasurer';
 
@@ -59,6 +68,25 @@ export function Ledger({ session, initialMonth }: { session: Session; initialMon
 					<p className="text-sm text-stone-600">월 합계</p>
 					<p className="text-2xl font-bold">{won(data?.total ?? 0)}</p>
 				</div>
+			</div>
+
+			<div className="flex flex-wrap gap-2 text-sm">
+				<button
+					type="button"
+					onClick={() => download(month)}
+					disabled={!data || data.entries.length === 0}
+					className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 font-medium hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-50"
+				>
+					이 달 CSV 받기
+				</button>
+				<button
+					type="button"
+					onClick={() => download()}
+					disabled={!data || data.months.length === 0}
+					className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 font-medium hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-50"
+				>
+					전체 CSV 받기
+				</button>
 			</div>
 
 			{error && (

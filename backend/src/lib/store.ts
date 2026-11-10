@@ -204,6 +204,15 @@ export async function listEntries(
 	};
 }
 
+/** All entries of a club (optionally one month), oldest first, for CSV export. */
+export async function exportEntries(db: D1Database, clubId: string, month: string | null): Promise<Entry[]> {
+	const stmt = month
+		? db.prepare(`${ENTRY_SELECT} WHERE e.club_id = ? AND substr(e.date, 1, 7) = ? ORDER BY e.date, e.created_at`).bind(clubId, month)
+		: db.prepare(`${ENTRY_SELECT} WHERE e.club_id = ? ORDER BY e.date, e.created_at`).bind(clubId);
+	const { results } = await stmt.all<EntryRow>();
+	return results.map(toEntry);
+}
+
 /** Deletes only within the caller's club. false = no such entry there. */
 export async function deleteEntry(db: D1Database, clubId: string, id: string): Promise<boolean> {
 	const res = await db.prepare('DELETE FROM entries WHERE id = ? AND club_id = ?').bind(id, clubId).run();

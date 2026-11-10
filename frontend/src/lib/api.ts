@@ -113,6 +113,27 @@ export function listEntries(s: Session, month?: string) {
 	return request<Ledger>(`/api/entries${month ? `?month=${encodeURIComponent(month)}` : ''}`, { token: s.token });
 }
 
+/** Fetches the CSV with the bearer token and saves it (a plain link can't send Authorization). */
+export async function downloadCsv(s: Session, month?: string): Promise<void> {
+	let res: Response;
+	try {
+		res = await fetch(`${API_ORIGIN}/api/entries.csv${month ? `?month=${encodeURIComponent(month)}` : ''}`, {
+			headers: { Authorization: `Bearer ${s.token}` },
+		});
+	} catch {
+		throw new ApiError(0, 'network');
+	}
+	if (!res.ok) throw new ApiError(res.status, 'error');
+	const url = URL.createObjectURL(await res.blob());
+	const a = document.createElement('a');
+	a.href = url;
+	a.download = `${s.clubName.replace(/[\\/:*?"<>|]/g, '_')}-장부-${month ?? '전체'}.csv`;
+	document.body.append(a);
+	a.click();
+	a.remove();
+	setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export function deleteEntry(s: Session, id: string) {
 	return request<void>(`/api/entries/${encodeURIComponent(id)}`, { method: 'DELETE', token: s.token });
 }
