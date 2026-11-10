@@ -1,0 +1,9 @@
+# Security headers for static assets (Workers static assets `_headers`).
+# https://developers.cloudflare.com/workers/static-assets/headers/
+# connect-src: the backend API Worker (fetch + Flue conversation streams).
+# img-src blob:/data: — receipt preview uses an object URL.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self' https://club-treasurer-api.developer-yun7.workers.dev; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(), microphone=(), payment=()
