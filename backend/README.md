@@ -1,37 +1,18 @@
 # backend
 
-A [Flue](https://flueframework.com) agent project.
+Flue + Hono API Worker for Club Treasurer. See the [root README](../README.md).
 
-## Setup
+- `src/app.ts` — route map: CORS → `/api/*` → agent gate → `/agents/receipt`
+- `src/agents/receipt.ts` — Receipt agent (`propose_entry` tool)
+- `src/lib/` — auth (tokens, invite codes), store (D1), limits (daily caps)
+- `src/shared/schema.ts` — categories and Valibot schemas
+- `migrations/` — D1 schema
 
 ```sh
 npm install
-```
-
-Then add a model provider API key to `.env` (any [provider Pi supports](https://pi.dev/docs/latest/providers#api-keys)).
-
-## Talk to your agent
-
-```sh
-npx flue run src/agents/hello.ts --message "Say hello!"
-```
-
-Conversations are durable — pass `--id <id>` to continue one.
-
-## Develop
-
-```sh
-npm run dev
-```
-
-The Hello agent is served at `http://localhost:5173/agents/hello` — see `src/app.ts` for the route map and an example request.
-
-## Deploy
-
-```sh
+cp .dev.vars.example .dev.vars
+npx wrangler d1 migrations apply club-treasurer --local
+npm run dev           # http://localhost:5173
+npm run check:types
 npm run deploy
 ```
-
-## Learn more
-
-- [Flue docs](https://flueframework.com/docs/) — or `npx flue docs` from the terminal.

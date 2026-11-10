@@ -11,8 +11,8 @@ This is a [Flue](https://flueframework.com) project: agents are TypeScript funct
 
 ## Commands
 
-- `npx flue run src/agents/hello.ts --message "Hi"` — run an agent locally, no server.
-- `npm run dev` — start the dev server.
+- `npm run dev` — start the dev server. The Receipt agent imports `cloudflare:workers`, so test it through `vite dev` (POST an image to `/agents/receipt/:id`), not `flue run`.
+- `npm run cf-typegen` — regenerate `worker-configuration.d.ts` after editing `wrangler.jsonc`.
 - `npm run deploy` — build and deploy the Worker.
 - `npm run check:types` — typecheck.
 - `npx flue docs search <query>` — search the Flue docs from the terminal (then `flue docs read <path>`).

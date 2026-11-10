@@ -29,6 +29,6 @@
 - GitHub 레포 생성·push, 배포(`wrangler deploy`)는 실행 전에 사용자 확인.
 
 ## 명령어
-- 백엔드: `cd backend && npm run dev` / `npm run deploy` / `npm run check:types` / `npx flue run src/agents/receipt.ts --message "..."`
+- 백엔드: `cd backend && npm run dev` / `npm run deploy` / `npm run check:types` (에이전트는 `cloudflare:workers`를 import하므로 `flue run`이 아니라 dev 서버에 이미지를 POST해 시험한다)
 - 프론트엔드: `cd frontend && npm run dev` / `npm run build` / `npm run deploy`
 - D1: `npx wrangler d1 migrations apply <db> --local|--remote`
