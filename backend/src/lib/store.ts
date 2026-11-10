@@ -104,6 +104,112 @@ export async function conversationClub(db: D1Database, id: string): Promise<stri
 	return db.prepare('SELECT club_id FROM conversations WHERE id = ? LIMIT 1').bind(id).first<string>('club_id');
 }
 
+// ---- Ledger entries ----------------------------------------------------------
+
+export interface Entry {
+	id: string;
+	date: string;
+	merchant: string;
+	amount: number;
+	category: string;
+	reason: string;
+	memo: string;
+	savedBy: { id: string; name: string };
+	conversationId: string | null;
+	createdAt: string;
+}
+
+const ENTRY_SELECT = `SELECT e.id, e.date, e.merchant, e.amount, e.category, e.reason, e.memo,
+	e.saved_by, m.name AS saved_by_name, e.conversation_id, e.created_at
+	FROM entries e JOIN members m ON m.id = e.saved_by`;
+
+type EntryRow = {
+	id: string;
+	date: string;
+	merchant: string;
+	amount: number;
+	category: string;
+	reason: string;
+	memo: string;
+	saved_by: string;
+	saved_by_name: string;
+	conversation_id: string | null;
+	created_at: string;
+};
+
+function toEntry(r: EntryRow): Entry {
+	return {
+		id: r.id,
+		date: r.date,
+		merchant: r.merchant,
+		amount: r.amount,
+		category: r.category,
+		reason: r.reason,
+		memo: r.memo,
+		savedBy: { id: r.saved_by, name: r.saved_by_name },
+		conversationId: r.conversation_id,
+		createdAt: r.created_at,
+	};
+}
+
+/**
+ * Idempotent save: the same (club, Idempotency-Key) yields one row. `created` is false
+ * when the key was already used, and the existing row (same club only) is returned.
+ */
+export async function saveEntry(
+	db: D1Database,
+	member: Member,
+	key: string,
+	e: { date: string; merchant: string; amount: number; category: string; reason: string; memo: string; conversationId: string | null },
+): Promise<{ entry: Entry; created: boolean }> {
+	const inserted = await db
+		.prepare(
+			`INSERT INTO entries (id, club_id, idempotency_key, date, merchant, amount, category, reason, memo, saved_by, conversation_id)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			 ON CONFLICT (club_id, idempotency_key) DO NOTHING
+			 RETURNING id`,
+		)
+		.bind(crypto.randomUUID(), member.clubId, key, e.date, e.merchant, e.amount, e.category, e.reason, e.memo, member.id, e.conversationId)
+		.first<{ id: string }>();
+	const row = await db
+		.prepare(`${ENTRY_SELECT} WHERE e.club_id = ? AND e.idempotency_key = ? LIMIT 1`)
+		.bind(member.clubId, key)
+		.first<EntryRow>();
+	if (!row) throw new Error('entry missing after insert');
+	return { entry: toEntry(row), created: inserted !== null };
+}
+
+export async function listEntries(
+	db: D1Database,
+	clubId: string,
+	month: string,
+): Promise<{ entries: Entry[]; total: number; byCategory: { category: string; amount: number; count: number }[]; months: string[] }> {
+	const [list, months] = await db.batch([
+		db.prepare(`${ENTRY_SELECT} WHERE e.club_id = ? AND substr(e.date, 1, 7) = ? ORDER BY e.date DESC, e.created_at DESC`).bind(clubId, month),
+		db.prepare('SELECT DISTINCT substr(date, 1, 7) AS month FROM entries WHERE club_id = ? ORDER BY month DESC').bind(clubId),
+	]);
+	const entries = (list.results as EntryRow[]).map(toEntry);
+	const totals = new Map<string, { amount: number; count: number }>();
+	for (const e of entries) {
+		const t = totals.get(e.category) ?? { amount: 0, count: 0 };
+		t.amount += e.amount;
+		t.count += 1;
+		totals.set(e.category, t);
+	}
+	return {
+		entries,
+		total: entries.reduce((sum, e) => sum + e.amount, 0),
+		byCategory: [...totals].map(([category, t]) => ({ category, ...t })).sort((a, b) => b.amount - a.amount),
+		months: (months.results as { month: string }[]).map((r) => r.month),
+	};
+}
+
+/** Deletes only within the caller's club. false = no such entry there. */
+export async function deleteEntry(db: D1Database, clubId: string, id: string): Promise<boolean> {
+	const res = await db.prepare('DELETE FROM entries WHERE id = ? AND club_id = ?').bind(id, clubId).run();
+	return res.meta.changes === 1;
+}
+
 /** Atomically claims the single allowed message POST. false = already used. */
 export async function claimConversation(db: D1Database, id: string): Promise<boolean> {
 	const res = await db.prepare('UPDATE conversations SET used = 1 WHERE id = ? AND used = 0').bind(id).run();

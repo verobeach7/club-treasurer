@@ -10,11 +10,22 @@ import {
 	conversationClub,
 	createClub,
 	createConversation,
+	deleteEntry,
 	joinClub,
+	listEntries,
 	type Member,
 	memberByToken,
+	saveEntry,
 } from './lib/store.ts';
-import { CONVERSATION_ID_RE, CreateClubBody, JoinBody } from './shared/schema.ts';
+import {
+	CONVERSATION_ID_RE,
+	CreateClubBody,
+	EntryBody,
+	IdempotencyKey,
+	JoinBody,
+	kstToday,
+	Month,
+} from './shared/schema.ts';
 
 type AppEnv = { Bindings: Env; Variables: { member: Member } };
 
@@ -118,6 +129,47 @@ app.post('/api/conversations', requireMember, async (c) => {
 	});
 	if (remaining <= 0) return err(c, 429, 'daily_limit');
 	return c.json({ conversationId: await createConversation(c.env.DB, m) }, 201);
+});
+
+// ---- Ledger ----------------------------------------------------------------
+// Club comes from the token only — never from the path or body.
+
+app.post('/api/entries', requireMember, async (c) => {
+	const m = c.var.member;
+	const key = v.safeParse(IdempotencyKey, c.req.header('Idempotency-Key') ?? '');
+	if (!key.success) return err(c, 400, 'invalid_idempotency_key');
+	const body = await readJson(c, EntryBody);
+	if (!body) return err(c, 400, 'invalid_body');
+	const conversationId = body.conversationId ?? null;
+	if (conversationId && (await conversationClub(c.env.DB, conversationId)) !== m.clubId) {
+		return err(c, 400, 'invalid_conversation');
+	}
+	const { entry, created } = await saveEntry(c.env.DB, m, key.output, {
+		date: body.date,
+		merchant: body.merchant,
+		amount: body.amount,
+		category: body.category,
+		reason: body.reason,
+		memo: body.memo,
+		conversationId,
+	});
+	return c.json({ entry, created }, created ? 201 : 200);
+});
+
+app.get('/api/entries', requireMember, async (c) => {
+	const q = c.req.query('month');
+	const month = q === undefined ? kstToday().slice(0, 7) : v.safeParse(Month, q);
+	if (typeof month !== 'string' && !month.success) return err(c, 400, 'invalid_month');
+	const value = typeof month === 'string' ? month : month.output;
+	return c.json({ month: value, ...(await listEntries(c.env.DB, c.var.member.clubId, value)) });
+});
+
+app.delete('/api/entries/:id', requireMember, async (c) => {
+	const m = c.var.member;
+	if (m.role !== 'treasurer') return err(c, 403, 'treasurer_only');
+	const id = v.safeParse(v.pipe(v.string(), v.uuid()), c.req.param('id'));
+	if (!id.success || !(await deleteEntry(c.env.DB, m.clubId, id.output))) return err(c, 404, 'not_found');
+	return c.body(null, 204);
 });
 
 // ---- Agent gate (default deny) ---------------------------------------------

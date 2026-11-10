@@ -61,4 +61,41 @@ export const MemberName = displayText(1, 30);
 export const ClubName = displayText(1, 50);
 
 export const CreateClubBody = v.object({ name: ClubName, treasurerName: MemberName });
+
+/** Today in KST as YYYY-MM-DD. */
+export function kstToday(now = Date.now()): string {
+	return new Date(now + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+/** Real calendar date (v.isoDate accepts 2025-02-29), between 2020-01-01 and KST today + 1 day. */
+export const EntryDate = v.pipe(
+	v.string(),
+	v.isoDate(),
+	v.check((d) => new Date(`${d}T00:00:00Z`).toISOString().slice(0, 10) === d, 'invalid_date'),
+	v.check((d) => d >= '2020-01-01', 'date_too_old'),
+	v.check((d) => d <= kstToday(Date.now() + 24 * 60 * 60 * 1000), 'date_in_future'),
+);
+
+/** Body of `POST /api/entries`. The human-confirmed values; model output is never trusted directly. */
+export const EntryBody = v.object({
+	date: EntryDate,
+	merchant: displayText(1, 100),
+	amount: v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(10_000_000)),
+	category: v.picklist(CATEGORIES), // '분류 확인 필요' must be resolved before saving
+	// Model-written; strip control chars (e.g. newlines) instead of rejecting the save.
+	reason: v.optional(
+		v.pipe(
+			v.string(),
+			v.maxLength(300),
+			v.transform((s) => s.replace(/[\p{Cc}\p{Cf}]+/gu, ' ').trim()),
+		),
+		'',
+	),
+	memo: v.optional(displayText(0, 300), ''),
+	conversationId: v.optional(v.nullable(v.pipe(v.string(), v.regex(CONVERSATION_ID_RE)))),
+});
+export type EntryBody = v.InferOutput<typeof EntryBody>;
+
+export const IdempotencyKey = v.pipe(v.string(), v.uuid());
+export const Month = v.pipe(v.string(), v.regex(/^\d{4}-(0[1-9]|1[0-2])$/));
 export const JoinBody = v.object({ inviteCode: v.pipe(v.string(), v.maxLength(40)), name: MemberName });
