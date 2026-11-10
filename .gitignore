@@ -1,0 +1,19 @@
+docs/
+.DS_Store
+
+# dependencies / build
+node_modules/
+dist/
+
+# Cloudflare / Flue local state (local D1, Durable Object SQLite, uploaded receipt images)
+.wrangler/
+.flue-vite/
+.flue-vite.wrangler.jsonc
+
+# secrets
+.dev.vars*
+!.dev.vars.example
+.env*
+
+# test receipts (personal data)
+samples/
