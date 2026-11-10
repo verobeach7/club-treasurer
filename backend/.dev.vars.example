@@ -1,3 +1,8 @@
-# Copy to .dev.vars for local secrets (gitignored). Production: `npx wrangler secret put <NAME>`.
+# Copy to .dev.vars for local development (gitignored). Values here override wrangler.jsonc vars.
+# Production secrets: `npx wrangler secret put <NAME>`.
+
+# Frontend dev origin allowed by CORS locally.
+WEB_ORIGIN=http://localhost:5174
+
 # Only needed when RECEIPT_MODEL is switched to an `openai/...` model.
-OPENAI_API_KEY=
+# OPENAI_API_KEY=

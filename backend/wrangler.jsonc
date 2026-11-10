@@ -1,6 +1,8 @@
 {
 	"$schema": "./node_modules/wrangler/config-schema.json",
 	"name": "club-treasurer-api",
+	"workers_dev": true,
+	"preview_urls": false,
 	"compatibility_date": "2026-06-01",
 	"compatibility_flags": ["nodejs_compat"],
 	// Workers Traces shows each agent response as a trace with agent-level
@@ -24,8 +26,9 @@
 		// (catalog `input: ["text","image"]`), otherwise images become "(image omitted)".
 		// Switch to e.g. "openai/<model>" + `OPENAI_API_KEY` secret if Korean OCR is poor.
 		"RECEIPT_MODEL": "cloudflare/@cf/meta/llama-4-scout-17b-16e-instruct",
-		// Exact frontend origin allowed by CORS (no trailing slash). Empty = deny all cross-origin.
-		"WEB_ORIGIN": "http://localhost:5174",
+		// Exact production frontend origin allowed by CORS (no trailing slash). Empty = deny all
+		// cross-origin. Local dev overrides it via .dev.vars (see .dev.vars.example).
+		"WEB_ORIGIN": "https://club-treasurer.developer-yun7.workers.dev",
 		// Daily receipt-analysis caps (KST day). Exceeding any one -> 429.
 		"CLUB_DAILY_LIMIT": "20",
 		"IP_DAILY_LIMIT": "15",

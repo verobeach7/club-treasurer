@@ -29,3 +29,5 @@ dist-ssr
 !.dev.vars.example
 .env*
 !.env.example
+# Public backend origin only (no secrets) — committed so builds are reproducible.
+!.env.production

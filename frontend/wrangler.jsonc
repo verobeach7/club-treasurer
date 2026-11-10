@@ -4,7 +4,9 @@
  */
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "frontend",
+	"name": "club-treasurer",
+	"workers_dev": true,
+	"preview_urls": false,
 	"main": "worker/index.ts",
 	"compatibility_date": "2026-11-09",
 	"assets": {
