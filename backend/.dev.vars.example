@@ -1,0 +1,3 @@
+# Copy to .dev.vars for local secrets (gitignored). Production: `npx wrangler secret put <NAME>`.
+# Only needed when RECEIPT_MODEL is switched to an `openai/...` model.
+OPENAI_API_KEY=

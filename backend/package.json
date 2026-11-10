@@ -6,11 +6,13 @@
 		"dev": "vite dev",
 		"build": "vite build",
 		"deploy": "vite build && wrangler deploy",
-		"check:types": "tsc --noEmit"
+		"check:types": "tsc --noEmit",
+		"cf-typegen": "wrangler types --strict-vars=false"
 	},
 	"dependencies": {
 		"@flue/runtime": "^2.3.0",
-		"hono": "^4.12.32"
+		"hono": "^4.12.32",
+		"valibot": "^1.5.0"
 	},
 	"devDependencies": {
 		"@cloudflare/vite-plugin": "^1.39.2",

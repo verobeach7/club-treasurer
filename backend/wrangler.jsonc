@@ -1,6 +1,6 @@
 {
 	"$schema": "./node_modules/wrangler/config-schema.json",
-	"name": "backend",
+	"name": "club-treasurer-api",
 	"compatibility_date": "2026-06-01",
 	"compatibility_flags": ["nodejs_compat"],
 	// Workers Traces shows each agent response as a trace with agent-level
@@ -9,10 +9,16 @@
 	// Keyless `cloudflare/...` models run through this Workers AI binding.
 	// It reaches your Cloudflare account even in local dev:
 	// https://flueframework.com/docs/guide/models/#cloudflare-workers-ai-cloudflare-only
-	// "ai": { "binding": "AI" },
+	"ai": { "binding": "AI" },
+	"vars": {
+		// Vision model for receipt reading. Must accept image input
+		// (catalog `input: ["text","image"]`), otherwise images become "(image omitted)".
+		// Switch to e.g. "openai/<model>" + `OPENAI_API_KEY` secret if Korean OCR is poor.
+		"RECEIPT_MODEL": "cloudflare/@cf/meta/llama-4-scout-17b-16e-instruct"
+	},
 	// Every agent generates a Durable Object class named after its identity
-	// (Hello -> FlueHelloAgent), and Cloudflare requires a migration entry
-	// for each one. Append a new tag when you add an agent:
+	// (Receipt -> FlueReceiptAgent), and Cloudflare requires a migration entry
+	// for each one. Append a new tag when you add an agent; never edit deployed entries:
 	// https://flueframework.com/docs/guide/cloudflare-target/#managing-migrations
-	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["FlueHelloAgent"] }]
+	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["FlueReceiptAgent"] }]
 }
