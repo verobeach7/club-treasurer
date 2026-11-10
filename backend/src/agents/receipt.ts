@@ -56,6 +56,7 @@ export function Receipt({ id }: AgentProps) {
 규칙:
 - 사진에 보이는 글자만 근거로 한다. 추측하지 않는다. 읽을 수 없는 값은 null로 두고 그 항목 이름을 needsReview에 넣는다.
 - date: 결제 날짜를 YYYY-MM-DD로 쓴다. 연도가 두 자리면 20XX로 쓴다. 오늘(한국 시간)은 ${todayKst()}이다.
+- time: 결제(승인·주문) 시각을 24시간제 HH:MM 또는 HH:MM:SS로 쓴다. 오후 2시 5분은 14:05다. '2025/01/13 21:56:47'처럼 날짜 뒤에 붙은 시각도 결제 시각으로 쓴다. 영수증에 시각이 없거나 읽을 수 없으면 null로 두고, 흐릿하게 보이면 needsReview에 time을 넣는다.
 - merchant: 가게 상호명. 사업자 번호나 주소가 아니라 이름을 쓴다.
 - amount: 결제 총액(합계, 받을 금액, 승인 금액)을 원 단위 정수로 쓴다. 쉼표와 '원'은 빼고, 부가세나 개별 품목 금액을 쓰지 않는다.
 - category: 다음 목록 중 하나를 고른다: ${ALL_CATEGORIES.join(', ')}. 맞는 분류가 없거나 애매하면 '${CATEGORY_NEEDS_REVIEW}'로 두고 needsReview에 category를 넣는다.

@@ -109,6 +109,7 @@ export async function conversationClub(db: D1Database, id: string): Promise<stri
 export interface Entry {
 	id: string;
 	date: string;
+	time: string | null; // HH:MM
 	merchant: string;
 	amount: number;
 	category: string;
@@ -119,13 +120,14 @@ export interface Entry {
 	createdAt: string;
 }
 
-const ENTRY_SELECT = `SELECT e.id, e.date, e.merchant, e.amount, e.category, e.reason, e.memo,
+const ENTRY_SELECT = `SELECT e.id, e.date, e.time, e.merchant, e.amount, e.category, e.reason, e.memo,
 	e.saved_by, m.name AS saved_by_name, e.conversation_id, e.created_at
 	FROM entries e JOIN members m ON m.id = e.saved_by`;
 
 type EntryRow = {
 	id: string;
 	date: string;
+	time: string | null;
 	merchant: string;
 	amount: number;
 	category: string;
@@ -141,6 +143,7 @@ function toEntry(r: EntryRow): Entry {
 	return {
 		id: r.id,
 		date: r.date,
+		time: r.time,
 		merchant: r.merchant,
 		amount: r.amount,
 		category: r.category,
@@ -160,23 +163,72 @@ export async function saveEntry(
 	db: D1Database,
 	member: Member,
 	key: string,
-	e: { date: string; merchant: string; amount: number; category: string; reason: string; memo: string; conversationId: string | null },
+	e: {
+		date: string;
+		time: string | null;
+		merchant: string;
+		amount: number;
+		category: string;
+		reason: string;
+		memo: string;
+		conversationId: string | null;
+	},
 ): Promise<{ entry: Entry; created: boolean }> {
 	const inserted = await db
 		.prepare(
-			`INSERT INTO entries (id, club_id, idempotency_key, date, merchant, amount, category, reason, memo, saved_by, conversation_id)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			`INSERT INTO entries (id, club_id, idempotency_key, date, time, merchant, amount, category, reason, memo, saved_by, conversation_id)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			 ON CONFLICT (club_id, idempotency_key) DO NOTHING
 			 RETURNING id`,
 		)
-		.bind(crypto.randomUUID(), member.clubId, key, e.date, e.merchant, e.amount, e.category, e.reason, e.memo, member.id, e.conversationId)
+		.bind(
+			crypto.randomUUID(),
+			member.clubId,
+			key,
+			e.date,
+			e.time,
+			e.merchant,
+			e.amount,
+			e.category,
+			e.reason,
+			e.memo,
+			member.id,
+			e.conversationId,
+		)
 		.first<{ id: string }>();
+	const row = await entryByKey(db, member.clubId, key);
+	if (!row) throw new Error('entry missing after insert');
+	return { entry: row, created: inserted !== null };
+}
+
+export async function entryByKey(db: D1Database, clubId: string, key: string): Promise<Entry | null> {
 	const row = await db
 		.prepare(`${ENTRY_SELECT} WHERE e.club_id = ? AND e.idempotency_key = ? LIMIT 1`)
-		.bind(member.clubId, key)
+		.bind(clubId, key)
 		.first<EntryRow>();
-	if (!row) throw new Error('entry missing after insert');
-	return { entry: toEntry(row), created: inserted !== null };
+	return row ? toEntry(row) : null;
+}
+
+/**
+ * Existing entries in the club with the same date and amount, split by how likely
+ * they are the same receipt:
+ * - `duplicates`: payment time matches to the minute, or either side has no time
+ * - `similar`: same date and amount but a different time (a different payment)
+ */
+export async function findSameDayAmount(
+	db: D1Database,
+	clubId: string,
+	date: string,
+	amount: number,
+	time: string | null,
+): Promise<{ duplicates: Entry[]; similar: Entry[] }> {
+	const { results } = await db
+		.prepare(`${ENTRY_SELECT} WHERE e.club_id = ? AND e.date = ? AND e.amount = ? ORDER BY e.created_at LIMIT 20`)
+		.bind(clubId, date, amount)
+		.all<EntryRow>();
+	const entries = results.map(toEntry);
+	const sameTime = (e: Entry) => e.time === null || time === null || e.time === time;
+	return { duplicates: entries.filter(sameTime), similar: entries.filter((e) => !sameTime(e)) };
 }
 
 export async function listEntries(
@@ -185,7 +237,7 @@ export async function listEntries(
 	month: string,
 ): Promise<{ entries: Entry[]; total: number; byCategory: { category: string; amount: number; count: number }[]; months: string[] }> {
 	const [list, months] = await db.batch([
-		db.prepare(`${ENTRY_SELECT} WHERE e.club_id = ? AND substr(e.date, 1, 7) = ? ORDER BY e.date DESC, e.created_at DESC`).bind(clubId, month),
+		db.prepare(`${ENTRY_SELECT} WHERE e.club_id = ? AND substr(e.date, 1, 7) = ? ORDER BY e.date DESC, e.time DESC, e.created_at DESC`).bind(clubId, month),
 		db.prepare('SELECT DISTINCT substr(date, 1, 7) AS month FROM entries WHERE club_id = ? ORDER BY month DESC').bind(clubId),
 	]);
 	const entries = (list.results as EntryRow[]).map(toEntry);
@@ -207,8 +259,8 @@ export async function listEntries(
 /** All entries of a club (optionally one month), oldest first, for CSV export. */
 export async function exportEntries(db: D1Database, clubId: string, month: string | null): Promise<Entry[]> {
 	const stmt = month
-		? db.prepare(`${ENTRY_SELECT} WHERE e.club_id = ? AND substr(e.date, 1, 7) = ? ORDER BY e.date, e.created_at`).bind(clubId, month)
-		: db.prepare(`${ENTRY_SELECT} WHERE e.club_id = ? ORDER BY e.date, e.created_at`).bind(clubId);
+		? db.prepare(`${ENTRY_SELECT} WHERE e.club_id = ? AND substr(e.date, 1, 7) = ? ORDER BY e.date, e.time, e.created_at`).bind(clubId, month)
+		: db.prepare(`${ENTRY_SELECT} WHERE e.club_id = ? ORDER BY e.date, e.time, e.created_at`).bind(clubId);
 	const { results } = await stmt.all<EntryRow>();
 	return results.map(toEntry);
 }

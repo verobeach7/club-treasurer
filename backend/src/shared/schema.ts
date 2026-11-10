@@ -16,7 +16,10 @@ export const CATEGORY_NEEDS_REVIEW = '분류 확인 필요' as const;
 
 export const ALL_CATEGORIES = [...CATEGORIES, CATEGORY_NEEDS_REVIEW] as const;
 
-export const REVIEW_FIELDS = ['date', 'merchant', 'amount', 'category'] as const;
+export const REVIEW_FIELDS = ['date', 'time', 'merchant', 'amount', 'category'] as const;
+
+/** HH:MM or HH:MM:SS (24h). */
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/;
 
 /** Conversation id: `${clubId}--${uuid}`, both server-issued UUIDs. */
 export const CONVERSATION_ID_RE = /^[0-9a-f-]{36}--[0-9a-f-]{36}$/;
@@ -30,6 +33,10 @@ export const ReceiptProposal = v.object({
 	date: v.pipe(
 		v.nullable(v.pipe(v.string(), v.regex(/^\d{4}-\d{2}-\d{2}$/))),
 		v.description('결제 날짜 YYYY-MM-DD. 읽을 수 없으면 null.'),
+	),
+	time: v.pipe(
+		v.nullable(v.pipe(v.string(), v.regex(TIME_RE))),
+		v.description('결제 시각 HH:MM 또는 HH:MM:SS(24시간제). 영수증에 없거나 읽을 수 없으면 null.'),
 	),
 	merchant: v.pipe(
 		v.nullable(v.pipe(v.string(), v.minLength(1), v.maxLength(100))),
@@ -79,6 +86,17 @@ export const EntryDate = v.pipe(
 /** Body of `POST /api/entries`. The human-confirmed values; model output is never trusted directly. */
 export const EntryBody = v.object({
 	date: EntryDate,
+	// Stored as HH:MM (seconds dropped): duplicate checks compare to the minute.
+	time: v.optional(
+		v.nullable(
+			v.pipe(
+				v.string(),
+				v.regex(TIME_RE),
+				v.transform((t) => t.slice(0, 5)),
+			),
+		),
+		null,
+	),
 	merchant: displayText(1, 100),
 	amount: v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(10_000_000)),
 	category: v.picklist(CATEGORIES), // '분류 확인 필요' must be resolved before saving
@@ -93,6 +111,8 @@ export const EntryBody = v.object({
 	),
 	memo: v.optional(displayText(0, 300), ''),
 	conversationId: v.optional(v.nullable(v.pipe(v.string(), v.regex(CONVERSATION_ID_RE)))),
+	/** Set after the user saw the possible-duplicate warning and chose to save anyway. */
+	allowDuplicate: v.optional(v.boolean(), false),
 });
 export type EntryBody = v.InferOutput<typeof EntryBody>;
 

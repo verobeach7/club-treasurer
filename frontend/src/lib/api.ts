@@ -17,10 +17,13 @@ export const CATEGORY_NEEDS_REVIEW = '분류 확인 필요';
 export class ApiError extends Error {
 	readonly status: number;
 	readonly code: string;
-	constructor(status: number, code: string) {
+	/** Parsed error body (e.g. `duplicates` on 409 possible_duplicate). */
+	readonly data: Record<string, unknown>;
+	constructor(status: number, code: string, data: Record<string, unknown> = {}) {
 		super(code);
 		this.status = status;
 		this.code = code;
+		this.data = data;
 	}
 }
 
@@ -35,8 +38,8 @@ async function request<T>(path: string, init: RequestInit & { token?: string } =
 		throw new ApiError(0, 'network');
 	}
 	if (res.status === 204) return undefined as T;
-	const body = (await res.json().catch(() => ({}))) as { error?: unknown };
-	if (!res.ok) throw new ApiError(res.status, typeof body.error === 'string' ? body.error : 'error');
+	const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+	if (!res.ok) throw new ApiError(res.status, typeof body.error === 'string' ? body.error : 'error', body);
 	return body as T;
 }
 
@@ -77,23 +80,38 @@ export function agentUrl(conversationId: string) {
 
 export interface EntryInput {
 	date: string;
+	time?: string | null; // HH:MM
 	merchant: string;
 	amount: number;
 	category: string;
 	reason?: string;
 	memo?: string;
 	conversationId?: string | null;
+	allowDuplicate?: boolean;
 }
 
-export interface Entry extends Required<Omit<EntryInput, 'conversationId'>> {
+export interface Entry {
 	id: string;
+	date: string;
+	time: string | null;
+	merchant: string;
+	amount: number;
+	category: string;
+	reason: string;
+	memo: string;
 	savedBy: { id: string; name: string };
 	conversationId: string | null;
 	createdAt: string;
 }
 
+/** 409 possible_duplicate: same date + amount + minute (or time unknown) already saved. */
+export function duplicatesOf(e: unknown): Entry[] | null {
+	if (!(e instanceof ApiError) || e.code !== 'possible_duplicate') return null;
+	return Array.isArray(e.data.duplicates) ? (e.data.duplicates as Entry[]) : [];
+}
+
 export function saveEntry(s: Session, idempotencyKey: string, entry: EntryInput) {
-	return request<{ entry: Entry; created: boolean }>('/api/entries', {
+	return request<{ entry: Entry; created: boolean; similar: Entry[] }>('/api/entries', {
 		method: 'POST',
 		token: s.token,
 		headers: { 'Idempotency-Key': idempotencyKey },

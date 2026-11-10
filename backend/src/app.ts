@@ -12,7 +12,9 @@ import {
 	createClub,
 	createConversation,
 	deleteEntry,
+	entryByKey,
 	exportEntries,
+	findSameDayAmount,
 	joinClub,
 	listEntries,
 	type Member,
@@ -146,8 +148,20 @@ app.post('/api/entries', requireMember, async (c) => {
 	if (conversationId && (await conversationClub(c.env.DB, conversationId)) !== m.clubId) {
 		return err(c, 400, 'invalid_conversation');
 	}
+	// A retry of an already-saved draft returns that row (it would otherwise match itself below).
+	const existing = await entryByKey(c.env.DB, m.clubId, key.output);
+	if (existing) return c.json({ entry: existing, created: false, similar: [] }, 200);
+
+	// Same receipt uploaded twice: same date + amount + time (minute), or time unknown on
+	// either side. Warn instead of blocking; the user may confirm with allowDuplicate.
+	const { duplicates, similar } = await findSameDayAmount(c.env.DB, m.clubId, body.date, body.amount, body.time);
+	if (duplicates.length > 0 && !body.allowDuplicate) {
+		return err(c, 409, 'possible_duplicate', { duplicates });
+	}
+
 	const { entry, created } = await saveEntry(c.env.DB, m, key.output, {
 		date: body.date,
+		time: body.time,
 		merchant: body.merchant,
 		amount: body.amount,
 		category: body.category,
@@ -155,7 +169,8 @@ app.post('/api/entries', requireMember, async (c) => {
 		memo: body.memo,
 		conversationId,
 	});
-	return c.json({ entry, created }, created ? 201 : 200);
+	// `similar`: same date + amount but a different time — saved, shown as a soft notice.
+	return c.json({ entry, created, similar }, created ? 201 : 200);
 });
 
 app.get('/api/entries', requireMember, async (c) => {

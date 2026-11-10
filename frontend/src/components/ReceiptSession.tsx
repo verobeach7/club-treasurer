@@ -14,6 +14,7 @@ function asProposal(output: unknown): Proposal | null {
 	return {
 		isReceipt: o.isReceipt !== false,
 		date: str(o.date),
+		time: str(o.time),
 		merchant: str(o.merchant),
 		amount: typeof o.amount === 'number' && Number.isInteger(o.amount) ? o.amount : null,
 		category: str(o.category) ?? '',
@@ -36,7 +37,7 @@ export function ReceiptSession({
 	session: Session;
 	conversationId: string;
 	image: ResizedImage;
-	onSaved: (e: Entry) => void;
+	onSaved: (e: Entry, similar: Entry[]) => void;
 }) {
 	// Memoized: a new client instance replaces the session.
 	const client = useMemo(

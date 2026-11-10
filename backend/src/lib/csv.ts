@@ -12,7 +12,17 @@ function cell(value: string | number): string {
 }
 
 export function entriesToCsv(entries: Entry[]): string {
-	const header = ['날짜', '상호', '금액', '분류', '메모', 'AI 근거', '저장자', '저장 시각(UTC)'];
-	const rows = entries.map((e) => [e.date, e.merchant, e.amount, e.category, e.memo, e.reason, e.savedBy.name, e.createdAt]);
+	const header = ['날짜', '결제 시각', '상호', '금액', '분류', '메모', 'AI 근거', '저장자', '저장 시각(UTC)'];
+	const rows = entries.map((e) => [
+		e.date,
+		e.time ?? '',
+		e.merchant,
+		e.amount,
+		e.category,
+		e.memo,
+		e.reason,
+		e.savedBy.name,
+		e.createdAt,
+	]);
 	return `﻿${[header, ...rows].map((r) => r.map(cell).join(',')).join('\r\n')}\r\n`;
 }

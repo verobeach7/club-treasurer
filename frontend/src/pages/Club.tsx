@@ -11,7 +11,7 @@ type State =
 	| { kind: 'preparing' }
 	| { kind: 'reading'; conversationId: string; image: ResizedImage }
 	| { kind: 'manual' }
-	| { kind: 'saved'; entry: Entry };
+	| { kind: 'saved'; entry: Entry; similar: Entry[] };
 
 export function Club({
 	session,
@@ -58,8 +58,8 @@ export function Club({
 		}
 	}
 
-	function saved(entry: Entry) {
-		setState({ kind: 'saved', entry });
+	function saved(entry: Entry, similar: Entry[]) {
+		setState({ kind: 'saved', entry, similar });
 		onChanged();
 	}
 
@@ -132,9 +132,15 @@ export function Club({
 				<div className="rounded-2xl border border-teal-200 bg-teal-50 p-6 text-center">
 					<p className="text-lg font-semibold text-teal-900">장부에 저장했습니다</p>
 					<p className="mt-2 text-teal-900">
-						{state.entry.date} · {state.entry.merchant} · <strong>{won(state.entry.amount)}</strong> ·{' '}
-						{state.entry.category}
+						{state.entry.date}
+						{state.entry.time ? ` ${state.entry.time}` : ''} · {state.entry.merchant} ·{' '}
+						<strong>{won(state.entry.amount)}</strong> · {state.entry.category}
 					</p>
+					{state.similar.length > 0 && (
+						<p className="mx-auto mt-3 max-w-md rounded-lg bg-white/70 px-3 py-2 text-sm text-stone-700">
+							참고: 같은 날 같은 금액 기록이 {state.similar.length}건 더 있습니다(결제 시각이 달라 다른 결제로 저장했어요).
+						</p>
+					)}
 					<div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-center">
 						<button type="button" onClick={reset} className={`${primaryButton} sm:w-auto sm:px-6`}>
 							다음 영수증

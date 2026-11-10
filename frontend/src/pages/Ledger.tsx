@@ -121,7 +121,8 @@ export function Ledger({ session, initialMonth }: { session: Session; initialMon
 									<div className="min-w-0">
 										<p className="truncate font-semibold">{e.merchant}</p>
 										<p className="text-sm text-stone-600">
-											{e.date} · {e.category}
+											{e.date}
+											{e.time ? ` ${e.time}` : ''} · {e.category}
 										</p>
 										<p className="text-xs text-stone-500">저장: {e.savedBy.name}</p>
 									</div>
@@ -157,7 +158,10 @@ export function Ledger({ session, initialMonth }: { session: Session; initialMon
 							<tbody className="divide-y divide-stone-100">
 								{data.entries.map((e) => (
 									<tr key={e.id}>
-										<td className="px-4 py-3 whitespace-nowrap">{e.date}</td>
+										<td className="px-4 py-3 whitespace-nowrap">
+											{e.date}
+											{e.time && <span className="ml-1 text-stone-500">{e.time}</span>}
+										</td>
 										<td className="max-w-56 truncate px-4 py-3">{e.merchant}</td>
 										<td className="px-4 py-3 whitespace-nowrap">{e.category}</td>
 										<td className="px-4 py-3 text-right font-semibold whitespace-nowrap">{won(e.amount)}</td>
