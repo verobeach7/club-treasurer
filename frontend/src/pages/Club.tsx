@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { DraftCard } from '../components/DraftCard.tsx';
 import { ReceiptSession } from '../components/ReceiptSession.tsx';
 import { type Entry, errorMessage, newConversation, won } from '../lib/api.ts';
@@ -26,7 +26,6 @@ export function Club({
 }) {
 	const [state, setState] = useState<State>({ kind: 'idle' });
 	const [error, setError] = useState<string | null>(null);
-	const fileInput = useRef<HTMLInputElement>(null);
 
 	// Release the preview object URL when the receipt changes.
 	useEffect(() => {
@@ -63,10 +62,15 @@ export function Club({
 		onChanged();
 	}
 
+	function pick(e: React.ChangeEvent<HTMLInputElement>) {
+		const file = e.target.files?.[0];
+		e.target.value = ''; // allow picking the same file again later
+		onFile(file);
+	}
+
 	function reset() {
 		setState({ kind: 'idle' });
 		setError(null);
-		if (fileInput.current) fileInput.current.value = '';
 	}
 
 	return (
@@ -77,18 +81,28 @@ export function Club({
 					<p className="mt-1 text-sm text-stone-600">
 						카드번호·이름 같은 개인정보는 가리고 올려 주세요. 데모 데이터는 삭제될 수 있습니다.
 					</p>
-					<label className={`${primaryButton} mt-5 inline-block w-auto cursor-pointer px-6`}>
-						{state.kind === 'preparing' ? '사진 준비 중…' : '사진 찍기 / 고르기'}
-						<input
-							ref={fileInput}
-							type="file"
-							accept="image/*"
-							capture="environment"
-							className="sr-only"
-							disabled={state.kind === 'preparing' || remaining === 0}
-							onChange={(e) => onFile(e.target.files?.[0])}
-						/>
-					</label>
+					{state.kind === 'preparing' ? (
+						<p className="mt-5 font-semibold text-teal-800">사진 준비 중…</p>
+					) : (
+						<div className="mt-5 flex flex-col justify-center gap-2 sm:flex-row">
+							{/* iOS opens the camera directly when `capture` is set, so the album needs its own input. */}
+							<label className={`${primaryButton} cursor-pointer sm:w-auto sm:px-6`}>
+								사진 찍기
+								<input
+									type="file"
+									accept="image/*"
+									capture="environment"
+									className="sr-only"
+									disabled={remaining === 0}
+									onChange={pick}
+								/>
+							</label>
+							<label className="cursor-pointer rounded-xl border border-teal-700 px-6 py-3 font-semibold text-teal-800 hover:bg-teal-50">
+								앨범에서 고르기
+								<input type="file" accept="image/*" className="sr-only" disabled={remaining === 0} onChange={pick} />
+							</label>
+						</div>
+					)}
 					<p className="mt-3 text-xs text-stone-500">
 						{remaining === null ? '' : remaining > 0 ? `오늘 남은 분석 ${remaining}회` : '오늘 분석 한도를 모두 썼습니다.'}
 					</p>
