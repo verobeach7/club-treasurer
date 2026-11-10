@@ -1,148 +1,115 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import cloudflareLogo from './assets/cloudflare.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { useCallback, useEffect, useState } from 'react';
+import { InviteBox } from './components/InviteBox.tsx';
+import { ApiError, getMe } from './lib/api.ts';
+import { clearSession, loadSession, type Session, saveSession } from './lib/session.ts';
+import { Club } from './pages/Club.tsx';
+import { Home } from './pages/Home.tsx';
+import { Ledger } from './pages/Ledger.tsx';
 
-function App() {
-  const [count, setCount] = useState(0)
-  const [name, setName] = useState('unknown')
+type View = 'upload' | 'ledger';
 
-  return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started with Cloudflare</h1>
-          <p>
-            Edit <code>src/App.tsx</code> or <code>worker/index.ts</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <ul style={{ display: 'flex', gap: '1rem', listStyle: 'none', padding: 0 }}>
-          <li>
-            <button
-              className="counter"
-              onClick={() => setCount((count) => count + 1)}
-            >
-              Count is {count}
-            </button>
-          </li>
-          <li>
-          <button
-            className="counter"
-            onClick={() => {
-              fetch('/api/')
-                .then((res) => res.json())
-                .then((data) => setName(data.name))
-            }}
-            aria-label='get name'
-          >
-            Name from API is: {name}
-          </button>
-          </li>
-        </ul>
+export default function App() {
+	const [session, setSession] = useState<Session | null>(loadSession);
+	const [view, setView] = useState<View>('upload');
+	const [ledgerMonth, setLedgerMonth] = useState<string | undefined>(undefined);
+	const [inviteCode, setInviteCode] = useState<string | null>(null);
+	const [remaining, setRemaining] = useState<number | null>(null);
 
+	const refreshMe = useCallback(async () => {
+		if (!session) return;
+		try {
+			const me = await getMe(session);
+			setInviteCode(me.club.inviteCode ?? null);
+			setRemaining(me.remainingAnalyses);
+		} catch (err) {
+			if (err instanceof ApiError && err.status === 401) {
+				clearSession();
+				setSession(null);
+			}
+		}
+	}, [session]);
 
-      </section>
+	useEffect(() => {
+		refreshMe();
+	}, [refreshMe]);
 
-      <div className="ticks"></div>
+	if (!session) {
+		return (
+			<Home
+				onEnter={(s, code) => {
+					saveSession(s);
+					setSession(s);
+					setInviteCode(code ?? null);
+					setView('upload');
+				}}
+			/>
+		);
+	}
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-            <li>
-              <a href="https://workers.cloudflare.com/" target="_blank">
-                <img className="button-icon" src={cloudflareLogo} alt="" />
-                Workers Docs
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+	function leave() {
+		clearSession();
+		setSession(null);
+		setInviteCode(null);
+		setRemaining(null);
+	}
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+	return (
+		<div className="min-h-dvh">
+			<header className="bg-teal-800 text-white">
+				<div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-4">
+					<div className="min-w-0">
+						<p className="truncate text-lg font-bold">{session.clubName}</p>
+						<p className="text-sm text-teal-100">
+							{session.name} · {session.role === 'treasurer' ? '재무 이사' : '회원'}
+						</p>
+					</div>
+					<div className="flex flex-wrap items-center gap-2">
+						{session.role === 'treasurer' && inviteCode && <InviteBox code={inviteCode} />}
+						<button type="button" onClick={leave} className="text-sm text-teal-100 underline">
+							나가기
+						</button>
+					</div>
+				</div>
+				<nav className="mx-auto flex max-w-5xl gap-1 px-4" aria-label="화면">
+					{(
+						[
+							['upload', '영수증 올리기'],
+							['ledger', '장부'],
+						] as const
+					).map(([key, label]) => (
+						<button
+							key={key}
+							type="button"
+							onClick={() => {
+								setLedgerMonth(undefined);
+								setView(key);
+							}}
+							aria-current={view === key ? 'page' : undefined}
+							className={`rounded-t-lg px-4 py-2 text-sm font-semibold ${
+								view === key ? 'bg-stone-50 text-teal-900' : 'text-teal-100 hover:text-white'
+							}`}
+						>
+							{label}
+						</button>
+					))}
+				</nav>
+			</header>
+
+			<main className="mx-auto max-w-5xl px-4 py-6">
+				{view === 'upload' ? (
+					<Club
+						session={session}
+						remaining={remaining}
+						onChanged={refreshMe}
+						onShowLedger={(month) => {
+							setLedgerMonth(month);
+							setView('ledger');
+						}}
+					/>
+				) : (
+					<Ledger key={ledgerMonth ?? 'current'} session={session} initialMonth={ledgerMonth} />
+				)}
+			</main>
+		</div>
+	);
 }
-
-export default App

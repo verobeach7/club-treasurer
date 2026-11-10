@@ -1,12 +1,7 @@
+// Static SPA assets are served before this Worker runs (assets.not_found_handling =
+// single-page-application). The API lives in the separate backend Worker.
 export default {
-  fetch(request) {
-    const url = new URL(request.url);
-
-    if (url.pathname.startsWith("/api/")) {
-      return Response.json({
-        name: "Cloudflare",
-      });
-    }
-		return new Response(null, { status: 404 });
-  },
+	fetch() {
+		return new Response('Not found', { status: 404 });
+	},
 } satisfies ExportedHandler<Env>;
