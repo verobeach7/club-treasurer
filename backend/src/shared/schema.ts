@@ -52,3 +52,13 @@ export const ReceiptProposal = v.object({
 });
 
 export type ReceiptProposal = v.InferOutput<typeof ReceiptProposal>;
+
+/** Trimmed, no control characters, length-bounded display text. */
+const displayText = (min: number, max: number) =>
+	v.pipe(v.string(), v.trim(), v.minLength(min), v.maxLength(max), v.regex(/^[^\p{Cc}\p{Cf}]*$/u));
+
+export const MemberName = displayText(1, 30);
+export const ClubName = displayText(1, 50);
+
+export const CreateClubBody = v.object({ name: ClubName, treasurerName: MemberName });
+export const JoinBody = v.object({ inviteCode: v.pipe(v.string(), v.maxLength(40)), name: MemberName });

@@ -1,13 +1,170 @@
 import { createAgentRouter } from '@flue/runtime/routing';
-import { Hono } from 'hono';
+import { type Context, Hono, type MiddlewareHandler } from 'hono';
+import { cors } from 'hono/cors';
+import * as v from 'valibot';
 import { Receipt } from './agents/receipt.ts';
+import { bearerToken, formatInviteCode, ipScope, normalizeInviteCode } from './lib/auth.ts';
+import { consumeAnalysis, consumeJoin, readLimits, remainingAnalyses } from './lib/limits.ts';
+import {
+	claimConversation,
+	conversationClub,
+	createClub,
+	createConversation,
+	joinClub,
+	type Member,
+	memberByToken,
+} from './lib/store.ts';
+import { CONVERSATION_ID_RE, CreateClubBody, JoinBody } from './shared/schema.ts';
 
-const app = new Hono();
+type AppEnv = { Bindings: Env; Variables: { member: Member } };
 
-// Step 1 (local agent check only). Step 2 adds, BEFORE this mount: CORS, token auth,
-// conversation-id ownership (server-issued ids, strict regex, default deny), and caps.
-// The agent router has no auth of its own:
-// https://flueframework.com/docs/guide/routing/#protecting-your-agents
-app.route('/agents/receipt', createAgentRouter(Receipt));
+const app = new Hono<AppEnv>();
+
+const AGENT_MOUNT = '/agents/receipt';
+/** Message POST body cap: a 1600px JPEG as base64 fits easily; blocks oversized direct calls. */
+const MAX_MESSAGE_BYTES = 2 * 1024 * 1024;
+
+// 1) CORS first, so 401/403/429 responses also carry CORS headers.
+// Exact-match origin only; empty WEB_ORIGIN allows no cross-origin caller (never '*').
+// https://hono.dev/docs/middleware/builtin/cors
+// Expose Flue's stream coordination headers: https://flueframework.com/docs/guide/routing/#cors
+app.use(
+	'*',
+	cors({
+		origin: (origin, c: Context<AppEnv>) => (c.env.WEB_ORIGIN && origin === c.env.WEB_ORIGIN ? origin : null),
+		allowMethods: ['GET', 'POST', 'DELETE', 'HEAD', 'OPTIONS'],
+		allowHeaders: ['Authorization', 'Content-Type', 'Idempotency-Key'],
+		exposeHeaders: ['Stream-Next-Offset', 'Stream-Up-To-Date', 'Location'],
+		maxAge: 600,
+	}),
+);
+
+const err = (c: Context, status: 400 | 401 | 403 | 404 | 409 | 411 | 413 | 429, error: string, extra?: object) =>
+	c.json({ error, ...extra }, status);
+
+async function readJson<T extends v.GenericSchema>(c: Context, schema: T): Promise<v.InferOutput<T> | null> {
+	let body: unknown;
+	try {
+		body = await c.req.json();
+	} catch {
+		return null;
+	}
+	const parsed = v.safeParse(schema, body);
+	return parsed.success ? parsed.output : null;
+}
+
+/** Bearer token -> member. Sets `c.var.member`. */
+const requireMember: MiddlewareHandler<AppEnv> = async (c, next) => {
+	const token = bearerToken(c.req.header('Authorization'));
+	const member = token ? await memberByToken(c.env.DB, token) : null;
+	if (!member) return err(c, 401, 'unauthorized');
+	c.set('member', member);
+	await next();
+};
+
+// ---- Public: create / join -------------------------------------------------
+
+app.post('/api/clubs', async (c) => {
+	const body = await readJson(c, CreateClubBody);
+	if (!body) return err(c, 400, 'invalid_body');
+	if (!(await consumeJoin(c.env.DB, readLimits(c.env), await ipScope('join-ip', c.req.raw)))) {
+		return err(c, 429, 'daily_limit', { scope: 'join-ip' });
+	}
+	const s = await createClub(c.env.DB, body.name, body.treasurerName);
+	return c.json(
+		{ clubId: s.clubId, clubName: s.clubName, inviteCode: s.inviteCode, token: s.token, role: s.role, name: s.name },
+		201,
+	);
+});
+
+app.post('/api/join', async (c) => {
+	const body = await readJson(c, JoinBody);
+	if (!body) return err(c, 400, 'invalid_body');
+	// Count before lookup so invite-code guessing is rate limited too.
+	if (!(await consumeJoin(c.env.DB, readLimits(c.env), await ipScope('join-ip', c.req.raw)))) {
+		return err(c, 429, 'daily_limit', { scope: 'join-ip' });
+	}
+	const code = normalizeInviteCode(body.inviteCode);
+	const s = code ? await joinClub(c.env.DB, code, body.name) : null;
+	if (!s) return err(c, 404, 'invite_not_found');
+	return c.json({ clubId: s.clubId, clubName: s.clubName, token: s.token, role: s.role, name: s.name }, 201);
+});
+
+// ---- Members ---------------------------------------------------------------
+
+app.get('/api/me', requireMember, async (c) => {
+	const m = c.var.member;
+	const remaining = await remainingAnalyses(c.env.DB, readLimits(c.env), {
+		clubId: m.clubId,
+		ipScope: await ipScope('ip', c.req.raw),
+	});
+	return c.json({
+		member: { id: m.id, name: m.name, role: m.role },
+		club: {
+			id: m.clubId,
+			name: m.clubName,
+			...(m.role === 'treasurer' ? { inviteCode: formatInviteCode(m.inviteCode) } : {}),
+		},
+		remainingAnalyses: remaining,
+	});
+});
+
+/** One server-issued conversation per receipt. */
+app.post('/api/conversations', requireMember, async (c) => {
+	const m = c.var.member;
+	const remaining = await remainingAnalyses(c.env.DB, readLimits(c.env), {
+		clubId: m.clubId,
+		ipScope: await ipScope('ip', c.req.raw),
+	});
+	if (remaining <= 0) return err(c, 429, 'daily_limit');
+	return c.json({ conversationId: await createConversation(c.env.DB, m) }, 201);
+});
+
+// ---- Agent gate (default deny) ---------------------------------------------
+// The Flue agent router has no auth: https://flueframework.com/docs/guide/routing/#protecting-your-agents
+// Its routes (verified in createAgentRouter): POST/GET/HEAD /:id, POST /:id/abort,
+// GET /:id/attachments/:attachmentId. Anything else is 404 here.
+
+app.use(`${AGENT_MOUNT}/*`, async (c, next) => {
+	// Raw (undecoded) path: reject any percent-encoding so our id check and Flue's
+	// decoded `c.req.param('id')` can never disagree.
+	const raw = new URL(c.req.url).pathname;
+	if (raw.includes('%')) return err(c, 404, 'not_found');
+	const parts = raw.slice(AGENT_MOUNT.length + 1).split('/');
+	const [id, sub, attachmentId, ...rest] = parts;
+	const method = c.req.method;
+	const allowed =
+		rest.length === 0 &&
+		CONVERSATION_ID_RE.test(id ?? '') &&
+		((sub === undefined && attachmentId === undefined && ['GET', 'HEAD', 'POST'].includes(method)) ||
+			(sub === 'abort' && attachmentId === undefined && method === 'POST') ||
+			(sub === 'attachments' && !!attachmentId && method === 'GET'));
+	if (!allowed) return err(c, 404, 'not_found');
+
+	const token = bearerToken(c.req.header('Authorization'));
+	const member = token ? await memberByToken(c.env.DB, token) : null;
+	if (!member) return err(c, 401, 'unauthorized');
+
+	const clubId = await conversationClub(c.env.DB, id);
+	if (!clubId || clubId !== member.clubId) return err(c, 403, 'forbidden');
+
+	// Message delivery: one per conversation, size-capped, counted against daily caps.
+	if (method === 'POST' && sub === undefined) {
+		const len = Number(c.req.header('Content-Length') ?? Number.NaN);
+		if (!Number.isFinite(len)) return err(c, 411, 'length_required');
+		if (len > MAX_MESSAGE_BYTES) return err(c, 413, 'too_large');
+		if (!(await claimConversation(c.env.DB, id))) return err(c, 409, 'conversation_used');
+		const exceeded = await consumeAnalysis(c.env.DB, readLimits(c.env), {
+			clubId: member.clubId,
+			ipScope: await ipScope('ip', c.req.raw),
+		});
+		if (exceeded) return err(c, 429, 'daily_limit', { scope: exceeded });
+	}
+	await next();
+});
+
+app.route(AGENT_MOUNT, createAgentRouter(Receipt));
+
+app.notFound((c) => c.json({ error: 'not_found' }, 404));
 
 export default app;

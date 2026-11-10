@@ -10,11 +10,28 @@
 	// It reaches your Cloudflare account even in local dev:
 	// https://flueframework.com/docs/guide/models/#cloudflare-workers-ai-cloudflare-only
 	"ai": { "binding": "AI" },
+	// The ledger of record. database_id is not a secret (useless without account auth).
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "club-treasurer",
+			"database_id": "309b69e2-8c2a-411d-bb3a-4593826f59eb",
+			"migrations_dir": "migrations"
+		}
+	],
 	"vars": {
 		// Vision model for receipt reading. Must accept image input
 		// (catalog `input: ["text","image"]`), otherwise images become "(image omitted)".
 		// Switch to e.g. "openai/<model>" + `OPENAI_API_KEY` secret if Korean OCR is poor.
-		"RECEIPT_MODEL": "cloudflare/@cf/meta/llama-4-scout-17b-16e-instruct"
+		"RECEIPT_MODEL": "cloudflare/@cf/meta/llama-4-scout-17b-16e-instruct",
+		// Exact frontend origin allowed by CORS (no trailing slash). Empty = deny all cross-origin.
+		"WEB_ORIGIN": "http://localhost:5174",
+		// Daily receipt-analysis caps (KST day). Exceeding any one -> 429.
+		"CLUB_DAILY_LIMIT": "20",
+		"IP_DAILY_LIMIT": "15",
+		"GLOBAL_DAILY_LIMIT": "100",
+		// Daily club-create + join attempts per IP.
+		"JOIN_IP_DAILY_LIMIT": "20"
 	},
 	// Every agent generates a Durable Object class named after its identity
 	// (Receipt -> FlueReceiptAgent), and Cloudflare requires a migration entry
