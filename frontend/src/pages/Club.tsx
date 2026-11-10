@@ -6,6 +6,10 @@ import { type ResizedImage, resizeImage } from '../lib/resizeImage.ts';
 import type { Session } from '../lib/session.ts';
 import { primaryButton } from './Home.tsx';
 
+// Primary input is a finger (phone/tablet): offer camera + album. Desktop gets one file-picker button.
+// https://developer.mozilla.org/en-US/docs/Web/CSS/@media/pointer
+const touchPrimary = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
+
 type State =
 	| { kind: 'idle' }
 	| { kind: 'preparing' }
@@ -83,6 +87,11 @@ export function Club({
 					</p>
 					{state.kind === 'preparing' ? (
 						<p className="mt-5 font-semibold text-teal-800">사진 준비 중…</p>
+					) : !touchPrimary ? (
+						<label className={`${primaryButton} mt-5 inline-block cursor-pointer sm:w-auto sm:px-6`}>
+							사진 파일 선택
+							<input type="file" accept="image/*" className="sr-only" disabled={remaining === 0} onChange={pick} />
+						</label>
 					) : (
 						<div className="mt-5 flex flex-col justify-center gap-2 sm:flex-row">
 							{/* iOS opens the camera directly when `capture` is set, so the album needs its own input. */}
