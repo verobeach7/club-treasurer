@@ -24,10 +24,33 @@ export function newToken(): string {
 	return bytesToBase64Url(crypto.getRandomValues(new Uint8Array(32)));
 }
 
+/** Treasurer admin code: 16 × 5 bits = 80 bits; longer than invite codes so the two never collide. */
+const ADMIN_LENGTH = 16;
+
 /** Normalized (no hyphens). 256 % 32 === 0, so `byte & 31` is unbiased. */
-export function newInviteCode(): string {
-	const bytes = crypto.getRandomValues(new Uint8Array(INVITE_LENGTH));
+function randomCode(length: number): string {
+	const bytes = crypto.getRandomValues(new Uint8Array(length));
 	return [...bytes].map((b) => INVITE_ALPHABET[b & 31]).join('');
+}
+
+export function newInviteCode(): string {
+	return randomCode(INVITE_LENGTH);
+}
+
+export function newAdminCode(): string {
+	return randomCode(ADMIN_LENGTH);
+}
+
+/** Ignores case, spaces, and hyphens. Returns null when it can't be a valid admin code. */
+export function normalizeAdminCode(input: string): string | null {
+	return normalizeCode(input, ADMIN_LENGTH);
+}
+
+function normalizeCode(input: string, length: number): string | null {
+	const code = input.toUpperCase().replace(/[\s-]/g, '');
+	if (code.length !== length) return null;
+	for (const ch of code) if (!INVITE_ALPHABET.includes(ch)) return null;
+	return code;
 }
 
 /** `XXXX-XXXX-XXXX` for display. */
@@ -37,10 +60,7 @@ export function formatInviteCode(code: string): string {
 
 /** Ignores case, spaces, and hyphens. Returns null when it can't be a valid code. */
 export function normalizeInviteCode(input: string): string | null {
-	const code = input.toUpperCase().replace(/[\s-]/g, '');
-	if (code.length !== INVITE_LENGTH) return null;
-	for (const ch of code) if (!INVITE_ALPHABET.includes(ch)) return null;
-	return code;
+	return normalizeCode(input, INVITE_LENGTH);
 }
 
 /** `Authorization: Bearer <token>` (what `createFlueClient({ token })` sends). */

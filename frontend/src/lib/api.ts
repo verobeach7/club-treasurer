@@ -50,6 +50,17 @@ export interface SessionResponse {
 	role: Role;
 	name: string;
 	inviteCode?: string;
+	/** Only on club creation; shown once (the server stores a hash). */
+	adminCode?: string;
+}
+
+export function joinAsTreasurer(adminCode: string, name: string) {
+	return request<SessionResponse>('/api/join-treasurer', { method: 'POST', body: JSON.stringify({ adminCode, name }) });
+}
+
+/** Treasurer only: issues a new admin code; the previous one stops working. */
+export function rotateAdminCode(s: Session) {
+	return request<{ adminCode: string }>('/api/admin-code', { method: 'POST', token: s.token });
 }
 
 export function createClub(name: string, treasurerName: string) {
@@ -170,6 +181,8 @@ export function errorMessage(e: unknown): string {
 			return '오늘 분석 한도에 도달했습니다. 내일 다시 시도하거나 직접 입력해 주세요.';
 		case 'invite_not_found':
 			return '초대 코드를 찾지 못했습니다. 코드를 다시 확인해 주세요.';
+		case 'admin_code_not_found':
+			return '관리 코드를 찾지 못했습니다. 재발급했다면 새 코드를 입력해 주세요.';
 		case 'invalid_body':
 			return '입력값을 확인해 주세요.';
 		case 'unauthorized':

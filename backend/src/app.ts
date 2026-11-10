@@ -3,7 +3,7 @@ import { type Context, Hono, type MiddlewareHandler } from 'hono';
 import { cors } from 'hono/cors';
 import * as v from 'valibot';
 import { Receipt } from './agents/receipt.ts';
-import { bearerToken, formatInviteCode, ipScope, normalizeInviteCode } from './lib/auth.ts';
+import { bearerToken, formatInviteCode, ipScope, normalizeAdminCode, normalizeInviteCode } from './lib/auth.ts';
 import { entriesToCsv } from './lib/csv.ts';
 import { consumeAnalysis, consumeJoin, readLimits, remainingAnalyses } from './lib/limits.ts';
 import {
@@ -15,10 +15,12 @@ import {
 	entryByKey,
 	exportEntries,
 	findSameDayAmount,
+	joinAsTreasurer,
 	joinClub,
 	listEntries,
 	type Member,
 	memberByToken,
+	rotateAdminCode,
 	saveEntry,
 } from './lib/store.ts';
 import {
@@ -29,6 +31,7 @@ import {
 	JoinBody,
 	kstToday,
 	Month,
+	TreasurerJoinBody,
 } from './shared/schema.ts';
 
 type AppEnv = { Bindings: Env; Variables: { member: Member } };
@@ -87,6 +90,30 @@ app.post('/api/clubs', async (c) => {
 	}
 	const s = await createClub(c.env.DB, body.name, body.treasurerName);
 	return c.json(
+		{
+			clubId: s.clubId,
+			clubName: s.clubName,
+			inviteCode: s.inviteCode,
+			adminCode: s.adminCode, // shown once; only its hash is stored
+			token: s.token,
+			role: s.role,
+			name: s.name,
+		},
+		201,
+	);
+});
+
+/** Treasurer re-entry from another device with the admin code. Same per-IP cap as join. */
+app.post('/api/join-treasurer', async (c) => {
+	const body = await readJson(c, TreasurerJoinBody);
+	if (!body) return err(c, 400, 'invalid_body');
+	if (!(await consumeJoin(c.env.DB, readLimits(c.env), await ipScope('join-ip', c.req.raw)))) {
+		return err(c, 429, 'daily_limit', { scope: 'join-ip' });
+	}
+	const code = normalizeAdminCode(body.adminCode);
+	const s = code ? await joinAsTreasurer(c.env.DB, code, body.name) : null;
+	if (!s) return err(c, 404, 'admin_code_not_found');
+	return c.json(
 		{ clubId: s.clubId, clubName: s.clubName, inviteCode: s.inviteCode, token: s.token, role: s.role, name: s.name },
 		201,
 	);
@@ -122,6 +149,13 @@ app.get('/api/me', requireMember, async (c) => {
 		},
 		remainingAnalyses: remaining,
 	});
+});
+
+/** Treasurer only: issue a new admin code (the old one stops working). Shown once. */
+app.post('/api/admin-code', requireMember, async (c) => {
+	const m = c.var.member;
+	if (m.role !== 'treasurer') return err(c, 403, 'treasurer_only');
+	return c.json({ adminCode: await rotateAdminCode(c.env.DB, m.clubId) }, 201);
 });
 
 /** One server-issued conversation per receipt. */

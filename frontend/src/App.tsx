@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
+import { AdminCodeNotice } from './components/AdminCodeNotice.tsx';
 import { InviteBox } from './components/InviteBox.tsx';
-import { ApiError, getMe } from './lib/api.ts';
+import { ApiError, errorMessage, getMe, rotateAdminCode } from './lib/api.ts';
 import { clearSession, loadSession, type Session, saveSession } from './lib/session.ts';
 import { Club } from './pages/Club.tsx';
 import { Home } from './pages/Home.tsx';
@@ -14,6 +15,23 @@ export default function App() {
 	const [ledgerMonth, setLedgerMonth] = useState<string | undefined>(undefined);
 	const [inviteCode, setInviteCode] = useState<string | null>(null);
 	const [remaining, setRemaining] = useState<number | null>(null);
+	/** A just-issued admin code, shown once until dismissed. */
+	const [adminCode, setAdminCode] = useState<string | null>(null);
+	const [rotateStep, setRotateStep] = useState<'idle' | 'confirm' | 'busy'>('idle');
+	const [rotateError, setRotateError] = useState<string | null>(null);
+
+	async function rotate() {
+		if (!session) return;
+		setRotateStep('busy');
+		setRotateError(null);
+		try {
+			setAdminCode((await rotateAdminCode(session)).adminCode);
+		} catch (err) {
+			setRotateError(errorMessage(err));
+		} finally {
+			setRotateStep('idle');
+		}
+	}
 
 	const refreshMe = useCallback(async () => {
 		if (!session) return;
@@ -36,10 +54,11 @@ export default function App() {
 	if (!session) {
 		return (
 			<Home
-				onEnter={(s, code) => {
+				onEnter={(s, codes) => {
 					saveSession(s);
 					setSession(s);
-					setInviteCode(code ?? null);
+					setInviteCode(codes.inviteCode ?? null);
+					setAdminCode(codes.adminCode ?? null);
 					setView('upload');
 				}}
 			/>
@@ -51,6 +70,8 @@ export default function App() {
 		setSession(null);
 		setInviteCode(null);
 		setRemaining(null);
+		setAdminCode(null);
+		setRotateStep('idle');
 	}
 
 	return (
@@ -65,6 +86,27 @@ export default function App() {
 					</div>
 					<div className="flex flex-wrap items-center gap-2">
 						{session.role === 'treasurer' && inviteCode && <InviteBox code={inviteCode} />}
+						{session.role === 'treasurer' &&
+							(rotateStep === 'confirm' ? (
+								<span className="flex items-center gap-2 rounded-lg bg-white/10 px-3 py-1.5 text-sm">
+									<span className="text-teal-50">이전 관리 코드는 못 쓰게 됩니다.</span>
+									<button type="button" onClick={rotate} className="font-semibold underline">
+										재발급
+									</button>
+									<button type="button" onClick={() => setRotateStep('idle')} className="text-teal-100">
+										취소
+									</button>
+								</span>
+							) : (
+								<button
+									type="button"
+									disabled={rotateStep === 'busy'}
+									onClick={() => setRotateStep('confirm')}
+									className="text-sm text-teal-100 underline"
+								>
+									관리 코드 재발급
+								</button>
+							))}
 						<button type="button" onClick={leave} className="text-sm text-teal-100 underline">
 							나가기
 						</button>
@@ -96,6 +138,12 @@ export default function App() {
 			</header>
 
 			<main className="mx-auto max-w-5xl px-4 py-6">
+				{adminCode && <AdminCodeNotice code={adminCode} onDismiss={() => setAdminCode(null)} />}
+				{rotateError && (
+					<p role="alert" className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+						{rotateError}
+					</p>
+				)}
 				{view === 'upload' ? (
 					<Club
 						session={session}

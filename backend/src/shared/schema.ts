@@ -119,3 +119,4 @@ export type EntryBody = v.InferOutput<typeof EntryBody>;
 export const IdempotencyKey = v.pipe(v.string(), v.uuid());
 export const Month = v.pipe(v.string(), v.regex(/^\d{4}-(0[1-9]|1[0-2])$/));
 export const JoinBody = v.object({ inviteCode: v.pipe(v.string(), v.maxLength(40)), name: MemberName });
+export const TreasurerJoinBody = v.object({ adminCode: v.pipe(v.string(), v.maxLength(40)), name: MemberName });

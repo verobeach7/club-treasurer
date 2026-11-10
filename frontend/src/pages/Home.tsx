@@ -1,14 +1,21 @@
 import { useState } from 'react';
-import { createClub, errorMessage, joinClub } from '../lib/api.ts';
+import { createClub, errorMessage, joinAsTreasurer, joinClub } from '../lib/api.ts';
 import type { Session } from '../lib/session.ts';
 
 type Tab = 'create' | 'join';
+/** Joining as a member (invite code) or re-entering as treasurer (admin code). */
+type JoinAs = 'member' | 'treasurer';
 
-export function Home({ onEnter }: { onEnter: (s: Session, inviteCode?: string) => void }) {
+export function Home({
+	onEnter,
+}: {
+	onEnter: (s: Session, codes: { inviteCode?: string; adminCode?: string }) => void;
+}) {
 	const [tab, setTab] = useState<Tab>('create');
+	const [joinAs, setJoinAs] = useState<JoinAs>('member');
 	const [clubName, setClubName] = useState('');
 	const [name, setName] = useState('');
-	const [inviteCode, setInviteCode] = useState('');
+	const [code, setCode] = useState('');
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
@@ -18,8 +25,15 @@ export function Home({ onEnter }: { onEnter: (s: Session, inviteCode?: string) =
 		setError(null);
 		try {
 			const r =
-				tab === 'create' ? await createClub(clubName.trim(), name.trim()) : await joinClub(inviteCode, name.trim());
-			onEnter({ token: r.token, clubId: r.clubId, clubName: r.clubName, name: r.name, role: r.role }, r.inviteCode);
+				tab === 'create'
+					? await createClub(clubName.trim(), name.trim())
+					: joinAs === 'treasurer'
+						? await joinAsTreasurer(code, name.trim())
+						: await joinClub(code, name.trim());
+			onEnter(
+				{ token: r.token, clubId: r.clubId, clubName: r.clubName, name: r.name, role: r.role },
+				{ inviteCode: r.inviteCode, adminCode: r.adminCode },
+			);
 		} catch (err) {
 			setError(errorMessage(err));
 		} finally {
@@ -28,7 +42,7 @@ export function Home({ onEnter }: { onEnter: (s: Session, inviteCode?: string) =
 	}
 
 	const canSubmit =
-		!busy && name.trim().length > 0 && (tab === 'create' ? clubName.trim().length > 0 : inviteCode.trim().length > 0);
+		!busy && name.trim().length > 0 && (tab === 'create' ? clubName.trim().length > 0 : code.trim().length > 0);
 
 	return (
 		<main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-4 py-10">
@@ -44,8 +58,8 @@ export function Home({ onEnter }: { onEnter: (s: Session, inviteCode?: string) =
 				<div className="mb-5 grid grid-cols-2 rounded-xl bg-stone-100 p-1 text-sm font-medium" role="tablist">
 					{(
 						[
-							['create', '클럽 만들기'],
-							['join', '초대 코드로 입장'],
+							['create', '새 클럽 만들기'],
+							['join', '기존 클럽 입장'],
 						] as const
 					).map(([key, label]) => (
 						<button
@@ -66,32 +80,72 @@ export function Home({ onEnter }: { onEnter: (s: Session, inviteCode?: string) =
 
 				<form onSubmit={submit} className="space-y-4">
 					{tab === 'create' ? (
-						<Field label="클럽 이름" hint="예: 한강 러닝 크루">
-							<input
-								className={inputClass}
-								value={clubName}
-								onChange={(e) => setClubName(e.target.value)}
-								maxLength={50}
-								required
-								autoFocus
-							/>
-						</Field>
+						<>
+							<p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
+								이 버튼은 <strong>항상 새 클럽</strong>을 만듭니다. 이미 만든 클럽에 다시 들어가려면 「기존 클럽 입장」에서
+								초대 코드(회원) 또는 관리 코드(재무 이사)를 입력하세요.
+							</p>
+							<Field label="클럽 이름" hint="예: 한강 러닝 크루">
+								<input
+									className={inputClass}
+									value={clubName}
+									onChange={(e) => setClubName(e.target.value)}
+									maxLength={50}
+									required
+									autoFocus
+								/>
+							</Field>
+						</>
 					) : (
-						<Field label="초대 코드" hint="재무 이사에게 받은 12자리 코드">
-							<input
-								className={`${inputClass} font-mono uppercase tracking-widest`}
-								value={inviteCode}
-								onChange={(e) => setInviteCode(e.target.value)}
-								placeholder="XXXX-XXXX-XXXX"
-								maxLength={20}
-								autoCapitalize="characters"
-								autoComplete="off"
-								required
-								autoFocus
-							/>
-						</Field>
+						<>
+							<div className="grid grid-cols-2 gap-2 text-sm" role="radiogroup" aria-label="입장 방식">
+								{(
+									[
+										['member', '회원 (초대 코드)'],
+										['treasurer', '재무 이사 (관리 코드)'],
+									] as const
+								).map(([key, label]) => (
+									<button
+										key={key}
+										type="button"
+										role="radio"
+										aria-checked={joinAs === key}
+										onClick={() => {
+											setJoinAs(key);
+											setCode('');
+											setError(null);
+										}}
+										className={`rounded-lg border px-2 py-2 font-medium ${
+											joinAs === key ? 'border-teal-700 bg-teal-50 text-teal-900' : 'border-stone-300 text-stone-600'
+										}`}
+									>
+										{label}
+									</button>
+								))}
+							</div>
+							<Field
+								label={joinAs === 'member' ? '초대 코드' : '관리 코드'}
+								hint={
+									joinAs === 'member'
+										? '재무 이사에게 받은 12자리 코드'
+										: '클럽을 만들 때 받은 16자리 코드. 잃어버렸다면 기존 기기에서 재발급하세요.'
+								}
+							>
+								<input
+									className={`${inputClass} font-mono uppercase tracking-widest`}
+									value={code}
+									onChange={(e) => setCode(e.target.value)}
+									placeholder={joinAs === 'member' ? 'XXXX-XXXX-XXXX' : 'XXXX-XXXX-XXXX-XXXX'}
+									maxLength={24}
+									autoCapitalize="characters"
+									autoComplete="off"
+									required
+									autoFocus
+								/>
+							</Field>
+						</>
 					)}
-					<Field label={tab === 'create' ? '내 이름 (재무 이사)' : '내 이름'}>
+					<Field label={tab === 'create' || joinAs === 'treasurer' ? '내 이름 (재무 이사)' : '내 이름'}>
 						<input
 							className={inputClass}
 							value={name}

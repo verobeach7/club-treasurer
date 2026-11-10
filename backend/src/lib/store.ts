@@ -1,6 +1,11 @@
 // D1 queries. (Not named `db.ts`: Flue's Cloudflare build rejects a source-root db.ts.)
 // D1 API: https://developers.cloudflare.com/d1/worker-api/
-import { formatInviteCode, newInviteCode, newToken, sha256Hex } from './auth.ts';
+import { formatInviteCode, newAdminCode, newInviteCode, newToken, sha256Hex } from './auth.ts';
+
+/** Admin codes are stored hashed (domain-separated from member tokens). */
+function adminCodeHash(normalizedCode: string): Promise<string> {
+	return sha256Hex(`admin-code:${normalizedCode}`);
+}
 
 export type Role = 'treasurer' | 'member';
 
@@ -21,6 +26,7 @@ export interface Session {
 	role: Role;
 	token: string;
 	inviteCode?: string; // formatted, treasurer only
+	adminCode?: string; // formatted; returned only when created/issued (stored hashed)
 }
 
 export async function memberByToken(db: D1Database, token: string): Promise<Member | null> {
@@ -55,12 +61,15 @@ export async function createClub(db: D1Database, clubName: string, treasurerName
 	const memberId = crypto.randomUUID();
 	const token = newToken();
 	const tokenHash = await sha256Hex(token);
-	// Retry on the (astronomically unlikely) invite-code collision.
+	// Retry on the (astronomically unlikely) invite/admin-code collision.
 	for (let attempt = 0; ; attempt++) {
 		const inviteCode = newInviteCode();
+		const adminCode = newAdminCode();
 		try {
 			await db.batch([
-				db.prepare('INSERT INTO clubs (id, name, invite_code) VALUES (?, ?, ?)').bind(clubId, clubName, inviteCode),
+				db
+					.prepare('INSERT INTO clubs (id, name, invite_code, admin_code_hash) VALUES (?, ?, ?, ?)')
+					.bind(clubId, clubName, inviteCode, await adminCodeHash(adminCode)),
 				insertMember(db, { id: memberId, clubId, name: treasurerName, role: 'treasurer', tokenHash }),
 			]);
 			return {
@@ -71,6 +80,7 @@ export async function createClub(db: D1Database, clubName: string, treasurerName
 				role: 'treasurer',
 				token,
 				inviteCode: formatInviteCode(inviteCode),
+				adminCode: formatInviteCode(adminCode),
 			};
 		} catch (err) {
 			if (attempt >= 2 || !String(err).includes('UNIQUE')) throw err;
@@ -89,6 +99,34 @@ export async function joinClub(db: D1Database, inviteCode: string, name: string)
 	const token = newToken();
 	await insertMember(db, { id: memberId, clubId: club.id, name, role: 'member', tokenHash: await sha256Hex(token) }).run();
 	return { clubId: club.id, clubName: club.name, memberId, name, role: 'member', token };
+}
+
+/** Re-enters a club as treasurer by normalized admin code. Returns null when no club matches. */
+export async function joinAsTreasurer(db: D1Database, adminCode: string, name: string): Promise<Session | null> {
+	const club = await db
+		.prepare('SELECT id, name, invite_code FROM clubs WHERE admin_code_hash = ? LIMIT 1')
+		.bind(await adminCodeHash(adminCode))
+		.first<{ id: string; name: string; invite_code: string }>();
+	if (!club) return null;
+	const memberId = crypto.randomUUID();
+	const token = newToken();
+	await insertMember(db, { id: memberId, clubId: club.id, name, role: 'treasurer', tokenHash: await sha256Hex(token) }).run();
+	return {
+		clubId: club.id,
+		clubName: club.name,
+		memberId,
+		name,
+		role: 'treasurer',
+		token,
+		inviteCode: formatInviteCode(club.invite_code),
+	};
+}
+
+/** Issues a new admin code for the club; the previous one stops working. Returns it formatted. */
+export async function rotateAdminCode(db: D1Database, clubId: string): Promise<string> {
+	const code = newAdminCode();
+	await db.prepare('UPDATE clubs SET admin_code_hash = ? WHERE id = ?').bind(await adminCodeHash(code), clubId).run();
+	return formatInviteCode(code);
 }
 
 export async function createConversation(db: D1Database, member: Member): Promise<string> {
