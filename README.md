@@ -86,3 +86,7 @@ npm run dev
 Cloudflare Workers · Wrangler · D1 · Durable Objects · Workers AI · [Flue](https://flueframework.com) 2.3 · Hono · Valibot · React 19 · Tailwind CSS v4 · Vite 8
 
 > 참고: `@earendil-works/pi-ai` 1.5.x가 Flue 2.3.0과 호환되지 않아 `backend/package.json`의 `overrides`로 1.4.0에 고정했습니다.
+
+## 라이선스
+
+[MIT](LICENSE)
