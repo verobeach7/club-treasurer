@@ -178,7 +178,9 @@ export function errorMessage(e: unknown): string {
 		case 'network':
 			return '서버에 연결하지 못했습니다. 네트워크를 확인해 주세요.';
 		case 'daily_limit':
-			return '오늘 분석 한도에 도달했습니다. 내일 다시 시도하거나 직접 입력해 주세요.';
+			return e.data.scope === 'join-ip'
+				? '오늘 이 네트워크에서 클럽 만들기·입장 가능 횟수를 모두 썼습니다. 내일 다시 시도해 주세요.'
+				: '오늘 분석 한도에 도달했습니다. 내일 다시 시도하거나 직접 입력해 주세요.';
 		case 'invite_not_found':
 			return '초대 코드를 찾지 못했습니다. 코드를 다시 확인해 주세요.';
 		case 'admin_code_not_found':
