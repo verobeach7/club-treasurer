@@ -9,7 +9,7 @@ import {
 	won,
 } from '../lib/api.ts';
 import type { Session } from '../lib/session.ts';
-import { Field, inputClass, primaryButton } from '../pages/Home.tsx';
+import { Field, inputBaseClass, inputClass, inputColorClass, primaryButton } from '../pages/Home.tsx';
 
 /** What the agent proposed (untrusted; only used to prefill the form). */
 export interface Proposal {
@@ -59,7 +59,10 @@ export function DraftCard({
 	if (proposal && !proposal.merchant) review.add('merchant');
 	if (proposal && proposal.amount == null) review.add('amount');
 	if (proposal && !category) review.add('category');
-	const flag = (f: FieldName) => (review.has(f) ? 'border-amber-400 bg-amber-50' : '');
+	// Yellow replaces the default colors instead of being appended: in the built CSS,
+	// border-stone-300/bg-white come after the amber rules and would always win.
+	const fieldClass = (f: FieldName) =>
+		`${inputBaseClass} ${review.has(f) ? 'border-amber-400 bg-amber-50' : inputColorClass}`;
 
 	const amountNumber = Number(amount.replace(/[^\d]/g, ''));
 	const valid =
@@ -154,7 +157,7 @@ export function DraftCard({
 				<Field label="날짜">
 					<input
 						type="date"
-						className={`${inputClass} ${flag('date')}`}
+						className={fieldClass('date')}
 						value={date}
 						onChange={(e) => setDate(e.target.value)}
 						min="2020-01-01"
@@ -164,7 +167,7 @@ export function DraftCard({
 				<Field label="결제 시각 (선택)" hint="중복 영수증을 거르는 데 씁니다">
 					<input
 						type="time"
-						className={`${inputClass} ${flag('time')}`}
+						className={fieldClass('time')}
 						value={time}
 						onChange={(e) => setTime(e.target.value.slice(0, 5))}
 					/>
@@ -174,7 +177,7 @@ export function DraftCard({
 				<Field label="금액 (원)" hint={amountNumber > 0 ? won(amountNumber) : undefined}>
 					<input
 						inputMode="numeric"
-						className={`${inputClass} ${flag('amount')}`}
+						className={fieldClass('amount')}
 						value={amount}
 						onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, ''))}
 						placeholder="예: 23000"
@@ -183,7 +186,7 @@ export function DraftCard({
 				</Field>
 				<Field label="상호">
 					<input
-						className={`${inputClass} ${flag('merchant')}`}
+						className={fieldClass('merchant')}
 						value={merchant}
 						onChange={(e) => setMerchant(e.target.value)}
 						maxLength={100}
@@ -196,7 +199,7 @@ export function DraftCard({
 				hint={proposal?.category === CATEGORY_NEEDS_REVIEW ? 'AI가 분류를 정하지 못했습니다. 직접 골라 주세요.' : undefined}
 			>
 				<select
-					className={`${inputClass} ${flag('category')}`}
+					className={fieldClass('category')}
 					value={category}
 					onChange={(e) => setCategory(e.target.value)}
 					required

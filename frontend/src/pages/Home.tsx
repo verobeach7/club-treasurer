@@ -175,8 +175,12 @@ export function Home({
 	);
 }
 
-export const inputClass =
-	'block w-full rounded-lg border border-stone-300 bg-white px-3 py-2.5 text-base outline-none transition focus:border-teal-600 focus:ring-2 focus:ring-teal-600/20';
+/** Input layout without border/background colors. Pair it with exactly one color set:
+ * Tailwind resolves conflicting utilities by stylesheet order, not class-string order. */
+export const inputBaseClass =
+	'block w-full rounded-lg border px-3 py-2.5 text-base outline-none transition focus:border-teal-600 focus:ring-2 focus:ring-teal-600/20';
+export const inputColorClass = 'border-stone-300 bg-white';
+export const inputClass = `${inputBaseClass} ${inputColorClass}`;
 
 export const primaryButton =
 	'w-full rounded-xl bg-teal-700 px-4 py-3 font-semibold text-white transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:bg-stone-300';
