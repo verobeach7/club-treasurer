@@ -17,3 +17,6 @@ dist/
 
 # test receipts (personal data)
 samples/
+
+# Claude Code personal settings (project settings.json is shared)
+.claude/settings.local.json
